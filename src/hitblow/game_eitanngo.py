@@ -1,6 +1,6 @@
 """英単語版 Hit & Blow"""
 
-from .core_eitanngo import judge_eitanngo, make_secret_eitanngo, WORDS
+from .core_eitanngo import judge_eitanngo, make_secret_eitanngo
 
 
 def play_eitanngo():

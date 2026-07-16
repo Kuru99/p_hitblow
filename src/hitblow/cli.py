@@ -2,8 +2,7 @@
 
 from .game import play
 from .game_eitanngo import play_eitanngo
-from .game_battle import play as play_battle
-
+from .game_battle import play_battle
 
 def main():
     print("=== Hit & Blow ===")
