@@ -17,13 +17,13 @@ WORDS = [
 ]
 
 
-def judge(secret, guess):
+def judge_eitanngo(secret, guess):
     """secret と guess を比べて (hit, blow) を返す。"""
     hits = sum(s == g for s, g in zip(secret, guess))
     common = sum(min(secret.count(c), guess.count(c)) for c in set(guess))
     return hits, common - hits
 
 
-def make_secret():
+def make_secret_eitanngo():
     """ランダムに英単語を1つ選ぶ。"""
     return random.choice(WORDS)

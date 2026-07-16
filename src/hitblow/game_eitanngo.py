@@ -1,10 +1,10 @@
 """英単語版 Hit & Blow"""
 
-from .core_eitanngo import judge, make_secret, WORDS
+from .core_eitanngo import judge_eitanngo, make_secret_eitanngo, WORDS
 
 
-def play():
-    secret = make_secret()
+def play_eitanngo():
+    secret = make_secret_eitanngo()
 
     print("Hit & Blow（英単語モード・3文字）")
     #print("使れる単語一覧")
@@ -25,7 +25,7 @@ def play():
 
         tries += 1
 
-        hit, blow = judge(secret, guess)
+        hit, blow = judge_eitanngo(secret, guess)
 
         print(f"  Hit={hit}  Blow={blow}")
 
