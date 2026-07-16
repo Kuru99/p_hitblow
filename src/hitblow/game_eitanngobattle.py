@@ -3,7 +3,7 @@
 from .core_eitanngo import judge, make_secret
 
 
-def play():
+def play_eitanngo_battle():
     secret = make_secret()
 
     print("=== 英単語 Hit & Blow 対戦モード ===")

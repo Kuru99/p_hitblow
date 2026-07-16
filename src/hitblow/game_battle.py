@@ -3,7 +3,7 @@
 from .core import judge, make_secret
 
 
-def play(digits=3):
+def play_battle(digits=3):
     secret = make_secret(digits)
     print(f"Hit & Blow 対戦モード（{digits} 桁・重複なし）")
     print("3文字の数字を入力してください。")
