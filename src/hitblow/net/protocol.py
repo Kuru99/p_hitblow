@@ -50,4 +50,33 @@ def msg_game_over():
         "message": "Max turns reached. Game over!"
     }
 
+def msg_server_status(count: int):
+    return {
+        "type": "server_status",
+        "count": count
+    }
 
+def msg_room_created(room_id: str):
+    return {
+        "type": "room_created",
+        "room_id": room_id
+    }
+
+def msg_room_joined(room_id: str, player_id: int):
+    return {
+        "type": "room_joined",
+        "room_id": room_id,
+        "player_id": player_id
+    }
+
+def msg_room_error(message: str):
+    return {
+        "type": "room_error",
+        "message": message
+    }
+
+def msg_player_ready(player_id: int):
+    return {
+        "type": "player_ready",
+        "player_id": player_id
+    }

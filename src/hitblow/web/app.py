@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import asyncio
 import json
+import random
 
 from hitblow.core import make_secret, judge
 from hitblow.net.protocol import (
@@ -10,121 +11,182 @@ from hitblow.net.protocol import (
     msg_result,
     msg_win,
     msg_game_over,
+    msg_server_status,
+    msg_room_created,
+    msg_room_joined,
+    msg_room_error,
+    msg_player_ready
 )
 
 app = FastAPI()
 
-# ゲーム状態
-class GameState:
+class Player:
+    def __init__(self, ws: WebSocket):
+        self.ws = ws
+        self.room_id = None
+        self.is_ready = False
+        self.player_idx = -1  # 0 or 1 in a room
+
+class Room:
+    def __init__(self, room_id: str):
+        self.room_id = room_id
+        self.players: list[Player] = []
+        self.state = "waiting" # waiting, ready, playing, finished
+        self.mode = "digits"
+        self.digits = 3
+        self.max_turns = 15
+        
+        # Game state
+        self.secret = ""
+        self.turn = 0
+        self.turn_count = 0
+        self.player_tries = [0, 0]
+
+class ConnectionManager:
     def __init__(self):
-        self.connected: list[WebSocket] = []
-        self.game_task: asyncio.Task | None = None
-        self.mode: str = "digits"  # "digits" or "letters"
-        self.digits: int = 3
-        self.max_turns: int = 15
-        self.game_active: bool = False
+        self.active_connections: list[Player] = []
+        self.rooms: dict[str, Room] = {}
 
-game_state = GameState()
+    async def connect(self, player: Player):
+        await player.ws.accept()
+        self.active_connections.append(player)
+        await self.broadcast_status()
 
+    async def disconnect(self, player: Player):
+        if player in self.active_connections:
+            self.active_connections.remove(player)
+        
+        # If in a room, handle disconnect
+        if player.room_id and player.room_id in self.rooms:
+            room = self.rooms[player.room_id]
+            if player in room.players:
+                room.players.remove(player)
+                # Notify remaining player
+                for p in room.players:
+                    try:
+                        await p.ws.send_text(json.dumps(msg_room_error("Opponent disconnected. Room closed.")))
+                    except:
+                        pass
+            del self.rooms[player.room_id]
+        
+        await self.broadcast_status()
 
-# GUI を返す
+    async def broadcast_status(self):
+        msg = json.dumps(msg_server_status(len(self.active_connections)))
+        for p in self.active_connections:
+            try:
+                await p.ws.send_text(msg)
+            except:
+                pass
+
+manager = ConnectionManager()
+
 @app.get("/")
 def gui():
     return FileResponse("src/hitblow/web/static/index.html")
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    game_state.connected.append(websocket)
-    print(f"Client connected. Total: {len(game_state.connected)}")
-
+    player = Player(websocket)
+    await manager.connect(player)
+    
     try:
-        # クライアントからのメッセージを処理
         while True:
             msg = await websocket.receive_text()
             data = json.loads(msg)
             msg_type = data.get("type")
+            
+            if msg_type == "create_room":
+                # Create a room
+                room_id = str(random.randint(1000, 9999))
+                room = Room(room_id)
+                room.mode = data.get("mode", "digits")
+                room.digits = data.get("digits", 3)
+                room.players.append(player)
+                player.room_id = room_id
+                player.player_idx = 0
+                manager.rooms[room_id] = room
+                await websocket.send_text(json.dumps(msg_room_created(room_id)))
+                await websocket.send_text(json.dumps(msg_room_joined(room_id, 0)))
 
-            # ゲーム設定（モード・難易度選択）
-            if msg_type == "game_config":
-                game_state.mode = data.get("mode", "digits")
-                game_state.digits = data.get("digits", 3)
-                game_state.max_turns = data.get("max_turns", 15)
-                print(f"Game config: mode={game_state.mode}, digits={game_state.digits}, max_turns={game_state.max_turns}")
+            elif msg_type == "join_room":
+                room_id = data.get("room_id")
+                if room_id in manager.rooms:
+                    room = manager.rooms[room_id]
+                    if len(room.players) < 2:
+                        room.players.append(player)
+                        player.room_id = room_id
+                        player.player_idx = 1
+                        await websocket.send_text(json.dumps(msg_room_joined(room_id, 1)))
+                    else:
+                        await websocket.send_text(json.dumps(msg_room_error("Room is full.")))
+                else:
+                    await websocket.send_text(json.dumps(msg_room_error("Room not found.")))
 
-                # 2人揃ったらゲーム開始
-                if len(game_state.connected) == 2 and game_state.game_task is None:
-                    game_state.game_active = True
-                    game_state.game_task = asyncio.create_task(game_loop())
+            elif msg_type == "ready":
+                if player.room_id and player.room_id in manager.rooms:
+                    room = manager.rooms[player.room_id]
+                    player.is_ready = True
+                    # Notify both players
+                    for p in room.players:
+                        await p.ws.send_text(json.dumps(msg_player_ready(player.player_idx)))
+                    
+                    # If both ready, start game
+                    if len(room.players) == 2 and all(p.is_ready for p in room.players):
+                        room.state = "playing"
+                        room.secret = make_secret(room.digits, room.mode)
+                        print(f"Room {room.room_id} started. Secret: {room.secret}")
+                        
+                        start_msg = msg_game_start(room.mode, room.digits, room.max_turns)
+                        for p in room.players:
+                            await p.ws.send_text(json.dumps(start_msg))
+                        
+                        # Send turn 1 to player 0
+                        room.turn_count = 1
+                        await room.players[0].ws.send_text(json.dumps(msg_your_turn(0, 1)))
+            
+            elif msg_type == "guess":
+                if player.room_id and player.room_id in manager.rooms:
+                    room = manager.rooms[player.room_id]
+                    if room.state != "playing":
+                        continue
+                    
+                    if player.player_idx != room.turn:
+                        # Not this player's turn
+                        continue
+                    
+                    guess = data.get("value", "")
+                    hit, blow = judge(room.secret, guess)
+                    room.player_tries[player.player_idx] += 1
+                    
+                    # Broadcast result
+                    res_msg = msg_result(player.player_idx, guess, hit, blow)
+                    for p in room.players:
+                        await p.ws.send_text(json.dumps(res_msg))
+                    
+                    # Check win
+                    if hit == room.digits:
+                        win_msg = msg_win(player.player_idx, room.secret, room.player_tries[player.player_idx])
+                        for p in room.players:
+                            await p.ws.send_text(json.dumps(win_msg))
+                        room.state = "finished"
+                        continue
+                    
+                    # Next turn
+                    room.turn = 1 - room.turn
+                    if room.turn == 0:
+                        room.turn_count += 1
+                    
+                    if room.turn_count > room.max_turns:
+                        over_msg = msg_game_over()
+                        for p in room.players:
+                            await p.ws.send_text(json.dumps(over_msg))
+                        room.state = "finished"
+                        continue
+                        
+                    # Notify next player
+                    next_player = room.players[room.turn]
+                    await next_player.ws.send_text(json.dumps(msg_your_turn(room.turn, room.turn_count)))
 
     except WebSocketDisconnect:
-        print("Client disconnected")
-        if websocket in game_state.connected:
-            game_state.connected.remove(websocket)
-        game_state.game_active = False
-        game_state.game_task = None
-
-
-async def game_loop():
-    """ゲーム進行のメインループ"""
-    try:
-        # ゲーム開始通知
-        start_msg = msg_game_start(game_state.mode, game_state.digits, game_state.max_turns)
-        for ws in game_state.connected:
-            await ws.send_text(json.dumps(start_msg))
-
-        # 秘密の数字を生成
-        secret = make_secret(game_state.digits, game_state.mode)
-        print(f"Secret: {secret}")
-
-        turn = 0  # 0: Player1, 1: Player2
-        turn_count = 0
-        player_tries = [0, 0]
-
-        while turn_count < game_state.max_turns:
-            # 接続が2人揃っていなければ終了
-            if len(game_state.connected) < 2:
-                print("Player disconnected. Ending game.")
-                break
-
-            # ターン通知
-            turn_count += 1
-            await game_state.connected[turn].send_text(json.dumps(msg_your_turn(turn, turn_count)))
-
-            # 入力待ち
-            msg = await game_state.connected[turn].receive_text()
-            data = json.loads(msg)
-            guess = data["value"]
-
-            # 判定
-            hit, blow = judge(secret, guess)
-            player_tries[turn] += 1
-
-            # 全員に結果通知
-            for ws in game_state.connected:
-                await ws.send_text(json.dumps(
-                    msg_result(turn, guess, hit, blow)
-                ))
-
-            # 勝利判定
-            if hit == game_state.digits:
-                for ws in game_state.connected:
-                    await ws.send_text(json.dumps(
-                        msg_win(turn, secret, player_tries[turn])
-                    ))
-                break
-
-            # ターン交代
-            turn = 1 - turn
-
-        # 最大ターン達成でゲームオーバー
-        if turn_count >= game_state.max_turns and hit < game_state.digits:
-            for ws in game_state.connected:
-                await ws.send_text(json.dumps(msg_game_over()))
-
-    except Exception as e:
-        print(f"Game loop error: {e}")
-    finally:
-        game_state.game_task = None
-        game_state.game_active = False
+        await manager.disconnect(player)
