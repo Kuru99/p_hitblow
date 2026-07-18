@@ -17,3 +17,20 @@ def test_mix():
 
 def test_none():
     assert judge("123", "456") == (0, 0)
+
+
+def test_make_secret_digits():
+    from hitblow.core import make_secret
+    secret = make_secret(3, "digits")
+    assert len(secret) == 3
+    assert secret.isdigit()
+    assert len(set(secret)) == 3  # 重複なし
+
+
+def test_make_secret_letters():
+    from hitblow.core import make_secret
+    secret = make_secret(4, "letters")
+    assert len(secret) == 4
+    assert secret.isalpha()
+    assert secret.isupper()
+    assert len(set(secret)) == 4  # 重複なし

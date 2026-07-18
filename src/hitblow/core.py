@@ -17,6 +17,16 @@ def judge(secret, guess):
     return hits, common - hits
 
 
-def make_secret(digits=3):
-    """重複なしの digits 桁の答えを作る。"""
-    return "".join(random.sample("0123456789", digits))
+def make_secret(digits=3, mode="digits"):
+    """重複なしの digits 桁の答えを作る。
+    
+    Args:
+        digits: 桁数（デフォルト3）
+        mode: "digits" = 数字, "letters" = 英字
+    """
+    if mode == "letters":
+        # 英字モード：A-Z から digits 個を選ぶ
+        return "".join(random.sample("ABCDEFGHIJKLMNOPQRSTUVWXYZ", digits))
+    else:
+        # 数字モード
+        return "".join(random.sample("0123456789", digits))

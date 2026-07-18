@@ -9,23 +9,27 @@
 from .core import judge, make_secret
 
 
-def play(digits=3):
-    secret = make_secret(digits)
-    print(f"Hit & Blow（{digits} 桁・重複なし）")
+def play(digits=3, mode="digits"):
+    secret = make_secret(digits, mode)
+    mode_name = "英字" if mode == "letters" else "数字"
+    print(f"Hit & Blow（{digits} 桁・{mode_name}・重複なし）")
 
     # ===== ① 開始時に足す（難易度・あいさつ など）: ここに書く =====
 
     tries = 0
     while True:
         guess = input("予想 > ").strip()
+        if mode == "letters":
+            guess = guess.upper()
 
         # ===== ② 入力コマンドに足す（ヒント など）: ここに書く（import もここに） =====
         # 例:  from .hint import hint
         #      if guess == "h":
         #          print(hint(secret)); continue
 
-        if len(guess) != digits or not guess.isdigit():
-            print(f"{digits} 桁の数字で入力してね")
+        valid = guess.isalpha() if mode == "letters" else guess.isdigit()
+        if len(guess) != digits or not valid:
+            print(f"{digits} 桁の{mode_name}で入力してね")
             continue
         tries += 1
         hit, blow = judge(secret, guess)

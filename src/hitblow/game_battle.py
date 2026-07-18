@@ -3,24 +3,27 @@
 from .core import judge, make_secret
 
 
-def play_battle(digits=3):
-    secret = make_secret(digits)
-    print(f"Hit & Blow 対戦モード（{digits} 桁・重複なし）")
-    print("3文字の数字を入力してください。")
+def play_battle(digits=3, mode="digits"):
+    secret = make_secret(digits, mode)
+    mode_name = "英字" if mode == "letters" else "数字"
+    print(f"Hit & Blow 対戦モード（{digits} 桁・{mode_name}・重複なし）")
+    print(f"{digits}文字の{mode_name}を入力してください。")
     # ===== ① 開始時に足す =====
 
     players = ["ユーザー1", "ユーザー2"]
     tries = [0, 0]
     turn = 0
-
     while True:
         player = players[turn]
         guess = input(f"{player} の予想 > ").strip()
+        if mode == "letters":
+            guess = guess.upper()
 
         # ===== ② 入力コマンドに足す =====
 
-        if len(guess) != digits or not guess.isdigit():
-            print(f"{digits} 桁の数字で入力してね")
+        valid = guess.isalpha() if mode == "letters" else guess.isdigit()
+        if len(guess) != digits or not valid:
+            print(f"{digits} 桁の{mode_name}で入力してね")
             continue
 
         tries[turn] += 1

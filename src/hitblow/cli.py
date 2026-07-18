@@ -3,7 +3,6 @@
 from .game import play
 from .game_eitanngo import play_eitanngo
 from .game_battle import play_battle
-from .net.websocket_client import run_client   # ★ 追加
 
 def main():
     print("=== Hit & Blow ===")
@@ -19,12 +18,13 @@ def main():
             break
 
         elif play_mode == "2":
-            play_battle()
+            choose_battle_mode()
             break
 
         elif play_mode == "3":
-            host = input("サーバーURLを入力してください（例: hitblow-ws.onrender.com） > ").strip()
-            run_client(host)
+            print("ブラウザで通信対戦ページを開きます...")
+            import webbrowser
+            webbrowser.open("https://p-hitblow.onrender.com")
             break
 
         else:
@@ -34,14 +34,33 @@ def main():
 def choose_solo_mode():
     print("1: 数字当てモード")
     print("2: 英単語当てモード")
+    print("3: 英語(ランダム)当てモード")
+
+    while True:
+        mode = input("モードを選んでください（1, 2, 3） > ").strip()
+        if mode == "1":
+            play(mode="digits")
+            break
+        elif mode == "2":
+            play_eitanngo()
+            break
+        elif mode == "3":
+            play(mode="letters")
+            break
+        else:
+            print("1, 2, 3 のいずれかを入力してね")
+
+def choose_battle_mode():
+    print("1: 数字当てモード")
+    print("2: 英語(ランダム)当てモード")
 
     while True:
         mode = input("モードを選んでください（1 or 2） > ").strip()
         if mode == "1":
-            play()
+            play_battle(mode="digits")
             break
         elif mode == "2":
-            play_eitanngo()
+            play_battle(mode="letters")
             break
         else:
             print("1か2を入力してね")
